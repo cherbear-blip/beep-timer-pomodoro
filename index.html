@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Beep & Pomodoro Timer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
+      background: #f0f4f8;
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    .timer-container {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      display: inline-block;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    input[type="number"] {
+      width: 80px;
+      padding: 0.5rem;
+      font-size: 1rem;
+      text-align: center;
+      margin: 1rem 0;
+    }
+    button {
+      padding: 0.7rem 1.2rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button.start {
+      background-color: #28a745;
+      color: white;
+    }
+    button.stop {
+      background-color: #dc3545;
+      color: white;
+    }
+    .countdown {
+      font-size: 2rem;
+      margin-top: 1rem;
+    }
+    .mode-toggle {
+      margin: 1rem 0;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="timer-container">
+    <h1>⏱️ Beep & Pomodoro Timer</h1>
+
+    <div class="mode-toggle">
+      <label>
+        <input type="radio" name="mode" value="custom" checked> Custom Interval
+      </label>
+      <label>
+        <input type="radio" name="mode" value="pomodoro"> Pomodoro Mode
+      </label>
+    </div>
+
+    <div id="customInput">
+      <label>Interval (seconds): </label>
+      <input type="number" id="interval" min="1" value="10"/>
+    </div>
+
+    <div>
+      <button class="start" id="startBtn">Start</button>
+      <button class="stop" id="stopBtn">Stop</button>
+    </div>
+
+    <div class="countdown" id="countdown">Ready</div>
+  </div>
+
+  <!-- Beep sound -->
+<audio id="beep" preload="auto">
+  <source src="beep.mp3" type="audio/mpeg">
+</audio>
+
+  <script>
+    const intervalInput = document.getElementById('interval');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const countdownEl = document.getElementById('countdown');
+    const customInput = document.getElementById('customInput');
+    const beep = document.getElementById('beep');
+
+    let mode = 'custom';
+    let timer = null;
+    let countdown = 0;
+    let pomodoroState = 'focus'; // 'focus' or 'break'
+
+    // Mode change
+    document.querySelectorAll('input[name="mode"]').forEach(input => {
+      input.addEventListener('change', (e) => {
+        mode = e.target.value;
+        customInput.classList.toggle('hidden', mode === 'pomodoro');
+        resetUI();
+      });
+    });
+
+    function resetUI() {
+      stopTimer();
+      countdownEl.textContent = 'Ready';
+    }
+
+    function startTimer() {
+      if (mode === 'custom') {
+        startCustomTimer();
+      } else {
+        startPomodoroTimer();
+      }
+    }
+
+    function stopTimer() {
+      clearInterval(timer);
+      timer = null;
+      startBtn.disabled = false;
+      intervalInput.disabled = false;
+    }
+
+    function startCustomTimer() {
+      let interval = parseInt(intervalInput.value, 10);
+      if (isNaN(interval) || interval <= 0) {
+        alert('Please enter a valid interval in seconds.');
+        return;
+      }
+
+      countdown = interval;
+      countdownEl.textContent = countdown;
+
+      timer = setInterval(() => {
+        countdown--;
+        countdownEl.textContent = countdown;
+
+        if (countdown <= 0) {
+          beep.play();
+          countdown = interval;
+        }
+      }, 1000);
+
+      startBtn.disabled = true;
+      intervalInput.disabled = true;
+    }
+
+    function startPomodoroTimer() {
+      if (pomodoroState === 'focus') {
+        countdown = 25 * 60;
+      } else {
+        countdown = 5 * 60;
+      }
+
+      updatePomodoroDisplay();
+
+      timer = setInterval(() => {
+        countdown--;
+        updatePomodoroDisplay();
+
+        if (countdown <= 0) {
+          beep.play();
+          switchPomodoroState();
+          startPomodoroTimer(); // restart in new mode
+        }
+      }, 1000);
+
+      startBtn.disabled = true;
+    }
+
+    function updatePomodoroDisplay() {
+      let min = Math.floor(countdown / 60);
+      let sec = countdown % 60;
+      countdownEl.textContent = `${pomodoroState === 'focus' ? 'Focus' : 'Break'}: ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }
+
+    function switchPomodoroState() {
+      pomodoroState = (pomodoroState === 'focus') ? 'break' : 'focus';
+    }
+
+    startBtn.addEventListener('click', startTimer);
+    stopBtn.addEventListener('click', stopTimer);
+  </script>
+
+</body>
+</html>
