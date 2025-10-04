@@ -103,10 +103,17 @@
 
     // Mode change
     document.querySelectorAll('input[name="mode"]').forEach(input => {
-      input.addEventListener('change', (e) => {
-        mode = e.target.value;
-        customInput.classList.toggle('hidden', mode === 'pomodoro');
-        resetUI();
+  input.addEventListener('change', (e) => {
+    mode = e.target.value;
+    customInput.classList.toggle('hidden', mode === 'pomodoro');
+    resetUI();
+
+    // 👇 Add this line
+    if (mode === 'pomodoro') {
+      pomodoroState = 'focus';
+      pomodoroEndTime = Date.now() + 25 * 60 * 1000;
+      updatePomodoroDisplay();
+	}
       });
     });
 
@@ -123,12 +130,17 @@
       }
     }
 
-    function stopTimer() {
-      clearInterval(timer);
-      timer = null;
-      startBtn.disabled = false;
-      intervalInput.disabled = false;
-    }
+   function stopTimer() {
+  	clearInterval(timer); // for custom mode
+  	cancelAnimationFrame(animationFrame); // stop pomodoro loop
+  	animationFrame = null;
+  	timer = null;
+  	pomodoroEndTime = null;
+  	startBtn.disabled = false;
+  	intervalInput.disabled = false;
+  	countdownEl.textContent = 'Stopped';
+   }
+
 
     function startCustomTimer() {
       let interval = parseInt(intervalInput.value, 10);
@@ -154,35 +166,46 @@
       intervalInput.disabled = true;
     }
 
-    function startPomodoroTimer() {
-      if (pomodoroState === 'focus') {
-        countdown = 25 * 60;
-      } else {
-        countdown = 5 * 60;
+    let pomodoroEndTime;
+    let animationFrame;
+
+function startPomodoroTimer() {
+  const duration = pomodoroState === 'focus' ? 25 * 60 : 5 * 60;
+  pomodoroEndTime = Date.now() + duration * 1000;
+
+  updatePomodoroDisplay(); // Initial render
+
+  function tick() {
+    updatePomodoroDisplay();
+
+    if (Date.now() < pomodoroEndTime) {
+      animationFrame = requestAnimationFrame(tick);
+    } else {
+      // Only switch and restart if not manually stopped
+      if (animationFrame !== null) {
+        switchPomodoroState(); // 🔁 switch state first
+        beep.currentTime = 0;
+        beep.play();
+        startPomodoroTimer(); // Restart in new mode
       }
-
-      updatePomodoroDisplay();
-
-      timer = setInterval(() => {
-        countdown--;
-        updatePomodoroDisplay();
-
-        if (countdown <= 0) {
-          beep.play();
-          switchPomodoroState();
-          startPomodoroTimer(); // restart in new mode
-        }
-      }, 1000);
-
-      startBtn.disabled = true;
     }
+  }
 
-    function updatePomodoroDisplay() {
-      let min = Math.floor(countdown / 60);
-      let sec = countdown % 60;
-      countdownEl.textContent = `${pomodoroState === 'focus' ? 'Focus' : 'Break'}: ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-    }
+  animationFrame = requestAnimationFrame(tick);
+  startBtn.disabled = true;
 
+}
+
+function updatePomodoroDisplay() {
+  const now = Date.now();
+  const remaining = Math.max(0, Math.floor((pomodoroEndTime - now) / 1000));
+
+  const min = Math.floor(remaining / 60).toString().padStart(2, '0');
+  const sec = (remaining % 60).toString().padStart(2, '0');
+
+  countdownEl.textContent = `${pomodoroState === 'focus' ? 'Focus' : 'Break'}: ${min}:${sec}`;
+
+}
     function switchPomodoroState() {
       pomodoroState = (pomodoroState === 'focus') ? 'break' : 'focus';
     }
@@ -194,6 +217,12 @@ startBtn.addEventListener('click', () => {
   beep.currentTime = 0;        // reset
 
   startTimer();                // now run your timer
+});
+// Resync Pomodoro timer when user returns to the tab
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && mode === "pomodoro" && timer !== null) {
+    updatePomodoroDisplay();
+  }
 });
     stopBtn.addEventListener('click', stopTimer);
   </script>
