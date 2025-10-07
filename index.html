@@ -1,9 +1,22 @@
 <!DOCTYPE html>
+<!-- 
+  Beep & Custom Interval Timer
+  © 2025 Cheryline Donesa. All rights reserved.
+  Built with ❤️ by CherBear — https://www.buymeacoffee.com/cherbear
+-->
+
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Beep & Pomodoro Timer</title>
+
+  <!-- PWA Setup -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#28a745">
+    <link rel="icon" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-512.png">
+
   <style>
     body {
       font-family: sans-serif;
@@ -71,8 +84,10 @@
     </div>
 
     <div id="customInput">
-      <label>Interval (seconds): </label>
-      <input type="number" id="interval" min="1" value="5"/>
+      <label>Work (sec): </label>
+      <input type="number" id="workDuration" value="10" min="1" />
+      <label>Rest (sec): </label>
+      <input type="number" id="breakDuration" value="5" min="1" />
     </div>
 
     <div>
@@ -84,36 +99,46 @@
   </div>
 
   <!-- Beep sound -->
-<audio id="beep" preload="auto">
-  <source src="beep.mp3" type="audio/mpeg">
-</audio>
+  <audio id="beep" preload="auto">
+    <source src="beep.mp3" type="audio/mpeg">
+  </audio>
 
   <script>
-    const intervalInput = document.getElementById('interval');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const countdownEl = document.getElementById('countdown');
-    const customInput = document.getElementById('customInput');
     const beep = document.getElementById('beep');
+    const customInput = document.getElementById('customInput');
 
-    let mode = 'custom';
+    let mode = 'custom'; // ✅ Default mode
     let timer = null;
-    let countdown = 0;
-    let pomodoroState = 'focus'; // 'focus' or 'break'
+    let pomodoroState = 'focus';
+    let customTimer = null;
+    let animationFrame;
+    let pomodoroEndTime;
 
-    // Mode change
+    // ✅ unlock audio once on any user click
+    document.body.addEventListener('click', () => {
+      beep.play().then(() => {
+        beep.pause();
+        beep.currentTime = 0;
+      }).catch(err => console.warn("Audio unlock failed:", err));
+    }, { once: true });
+
+    // Mode switch
     document.querySelectorAll('input[name="mode"]').forEach(input => {
-  input.addEventListener('change', (e) => {
-    mode = e.target.value;
-    customInput.classList.toggle('hidden', mode === 'pomodoro');
-    resetUI();
+      input.addEventListener('change', (e) => {
+        mode = e.target.value;
+        customInput.classList.toggle('hidden', mode !== 'custom');
+        stopTimer();
+        resetUI();
 
-    // 👇 Add this line
-    if (mode === 'pomodoro') {
-      pomodoroState = 'focus';
-      pomodoroEndTime = Date.now() + 25 * 60 * 1000;
-      updatePomodoroDisplay();
-	}
+        if (mode === 'pomodoro') {
+          pomodoroState = 'focus';
+          countdownEl.textContent = 'Focus: 25:00';
+        } else {
+          countdownEl.textContent = 'Ready';
+        }
       });
     });
 
@@ -123,107 +148,102 @@
     }
 
     function startTimer() {
-      if (mode === 'custom') {
-        startCustomTimer();
-      } else {
+      if (mode === 'pomodoro') {
         startPomodoroTimer();
+      } else if (mode === 'custom') {
+        startCustomInterval();
       }
     }
 
-   function stopTimer() {
-  	clearInterval(timer); // for custom mode
-  	cancelAnimationFrame(animationFrame); // stop pomodoro loop
-  	animationFrame = null;
-  	timer = null;
-  	pomodoroEndTime = null;
-  	startBtn.disabled = false;
-  	intervalInput.disabled = false;
-  	countdownEl.textContent = 'Stopped';
-   }
+    function stopTimer() {
+      clearInterval(timer);
+      clearInterval(customTimer);
+      cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+      timer = null;
+      customTimer = null;
+      pomodoroEndTime = null;
+      startBtn.disabled = false;
+      countdownEl.textContent = 'Stopped';
+    }
 
+    // Pomodoro logic
+    function startPomodoroTimer() {
+      const duration = pomodoroState === 'focus' ? 25 * 60 : 5 * 60;
+      pomodoroEndTime = Date.now() + duration * 1000;
 
-    function startCustomTimer() {
-      let interval = parseInt(intervalInput.value, 10);
-      if (isNaN(interval) || interval <= 0) {
-        alert('Please enter a valid interval in seconds.');
+      updatePomodoroDisplay();
+
+      function tick() {
+        updatePomodoroDisplay();
+        if (Date.now() < pomodoroEndTime) {
+          animationFrame = requestAnimationFrame(tick);
+        } else if (animationFrame !== null) {
+          switchPomodoroState();
+          playBeep();
+          startPomodoroTimer();
+        }
+      }
+
+      animationFrame = requestAnimationFrame(tick);
+      startBtn.disabled = true;
+    }
+
+    function updatePomodoroDisplay() {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.floor((pomodoroEndTime - now) / 1000));
+      const min = Math.floor(remaining / 60).toString().padStart(2, '0');
+      const sec = (remaining % 60).toString().padStart(2, '0');
+      countdownEl.textContent = `${pomodoroState === 'focus' ? 'Focus' : 'Break'}: ${min}:${sec}`;
+    }
+
+    function switchPomodoroState() {
+      pomodoroState = pomodoroState === 'focus' ? 'break' : 'focus';
+    }
+
+    // Custom Interval logic (previously Loop Mode)
+    function startCustomInterval() {
+      const workDuration = parseInt(document.getElementById('workDuration').value, 10);
+      const breakDuration = parseInt(document.getElementById('breakDuration').value, 10);
+
+      if (isNaN(workDuration) || workDuration <= 0 || isNaN(breakDuration) || breakDuration <= 0) {
+        alert('Please enter valid work and rest times in seconds.');
         return;
       }
 
-      countdown = interval;
-      countdownEl.textContent = countdown;
+      let isWork = true;
+      let remaining = workDuration;
 
-      timer = setInterval(() => {
-        countdown--;
-        countdownEl.textContent = countdown;
+      clearInterval(customTimer);
+      countdownEl.textContent = `Work: ${remaining}s`;
 
-        if (countdown <= 0) {
-          beep.play();
-          countdown = interval;
+      customTimer = setInterval(() => {
+        remaining--;
+        countdownEl.textContent = `${isWork ? 'Work' : 'Rest'}: ${remaining}s`;
+
+        if (remaining <= 0) {
+          playBeep();
+          isWork = !isWork;
+          remaining = isWork ? workDuration : breakDuration;
         }
       }, 1000);
 
       startBtn.disabled = true;
-      intervalInput.disabled = true;
     }
 
-    let pomodoroEndTime;
-    let animationFrame;
-
-function startPomodoroTimer() {
-  const duration = pomodoroState === 'focus' ? 25 * 60 : 5 * 60;
-  pomodoroEndTime = Date.now() + duration * 1000;
-
-  updatePomodoroDisplay(); // Initial render
-
-  function tick() {
-    updatePomodoroDisplay();
-
-    if (Date.now() < pomodoroEndTime) {
-      animationFrame = requestAnimationFrame(tick);
-    } else {
-      // Only switch and restart if not manually stopped
-      if (animationFrame !== null) {
-        switchPomodoroState(); // 🔁 switch state first
+    function playBeep() {
+      try {
         beep.currentTime = 0;
-        beep.play();
-        startPomodoroTimer(); // Restart in new mode
+        beep.play().catch(err => console.warn("Beep failed:", err));
+      } catch (err) {
+        console.warn("Beep playback error:", err);
       }
     }
-  }
 
-  animationFrame = requestAnimationFrame(tick);
-  startBtn.disabled = true;
+    startBtn.addEventListener('click', () => {
+      startTimer();
+    });
 
-}
-
-function updatePomodoroDisplay() {
-  const now = Date.now();
-  const remaining = Math.max(0, Math.floor((pomodoroEndTime - now) / 1000));
-
-  const min = Math.floor(remaining / 60).toString().padStart(2, '0');
-  const sec = (remaining % 60).toString().padStart(2, '0');
-
-  countdownEl.textContent = `${pomodoroState === 'focus' ? 'Focus' : 'Break'}: ${min}:${sec}`;
-
-}
-    function switchPomodoroState() {
-      pomodoroState = (pomodoroState === 'focus') ? 'break' : 'focus';
-    }
-
-startBtn.addEventListener('click', () => {
-  // ✅ Unlock audio playback permission by playing/pause/resetting the audio
-  beep.play().catch(() => {}); // try to play
-  beep.pause();                // immediately pause
-  beep.currentTime = 0;        // reset
-
-  startTimer();                // now run your timer
-});
-// Resync Pomodoro timer when user returns to the tab
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && mode === "pomodoro" && timer !== null) {
-    updatePomodoroDisplay();
-  }
-});
     stopBtn.addEventListener('click', stopTimer);
   </script>
 
