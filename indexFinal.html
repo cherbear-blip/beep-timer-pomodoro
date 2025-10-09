@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<!-- 
+  Beep & Custom Interval Timer
+  © 2025 Cheryline Donesa. All rights reserved.
+  Built with ❤️ by CherBear — https://www.buymeacoffee.com/cherbear
+-->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beep & Pomodoro Timer</title>
+
+    <!-- PWA Setup -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#28a745" />
+    <link rel="icon" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-512.png" />
+
+    <style>
+      body {
+        font-family: sans-serif;
+        text-align: center;
+        padding: 2rem;
+        background: #f0f4f8;
+      }
+
+      h1 {
+        margin-bottom: 1rem;
+      }
+
+      .timer-container {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        display: inline-block;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      input[type="number"] {
+        width: 80px;
+        padding: 0.5rem;
+        font-size: 1rem;
+        text-align: center;
+        margin: 1rem 0;
+      }
+
+      button {
+        padding: 0.7rem 1.2rem;
+        margin: 0.5rem;
+        font-size: 1rem;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      button.start {
+        background-color: #28a745;
+        color: white;
+      }
+
+      button.stop {
+        background-color: #dc3545;
+        color: white;
+      }
+
+      .countdown {
+        font-size: 2rem;
+        margin-top: 1rem;
+      }
+
+      .mode-toggle {
+        margin: 1rem 0;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      /* Controls + note */
+      .controls {
+        max-width: 620px;
+        margin: 0 auto 1rem;
+        text-align: center;
+      }
+
+      .btn-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        width: 100%;
+        max-width: 420px;
+        margin: 0 auto;
+      }
+
+      .btn-row button {
+        flex: 0 0 150px;
+        padding: 0.75rem 1.2rem;
+        font-size: 1.05rem;
+        border-radius: 8px;
+      }
+
+      .timer-note {
+        margin-top: 0.9rem;
+        color: #555;
+        font-style: italic;
+        font-size: 0.95rem;
+      }
+
+      /* Buy Me a Coffee button */
+      .support-button {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        background-color: #28a745;
+        color: #fff;
+        padding: 0.6rem 1rem;
+        border-radius: 30px;
+        font-size: 0.9rem;
+        text-decoration: none;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        opacity: 0.75;
+        transition: opacity 0.3s, transform 0.3s;
+        z-index: 1000;
+      }
+
+      .support-button:hover {
+        opacity: 1;
+        transform: translateY(-2px);
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 600px) {
+        body {
+          padding: 1rem;
+        }
+
+        .timer-container {
+          width: 100%;
+          padding: 1.2rem;
+          border-radius: 10px;
+        }
+
+        h1 {
+          font-size: 1.3rem;
+          margin-bottom: 0.8rem;
+        }
+
+        .btn-row {
+          flex-direction: column;
+          gap: 0.6rem;
+        }
+
+        .btn-row button {
+          flex: 1;
+          width: 100%;
+          max-width: 260px;
+          font-size: 1rem;
+          padding: 0.7rem 1rem;
+        }
+
+        .timer-note {
+          font-size: 0.85rem;
+          margin-top: 0.8rem;
+        }
+
+        input[type="number"] {
+          width: 70px;
+          font-size: 0.95rem;
+        }
+
+        .support-button {
+          bottom: 12px;
+          right: 12px;
+          font-size: 0.8rem;
+          padding: 0.5rem 0.9rem;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="timer-container">
+      <h1>⏱️ Beep & Pomodoro Timer</h1>
+
+      <div class="mode-toggle">
+        <label>
+          <input type="radio" name="mode" value="custom" checked />
+          Custom Interval
+        </label>
+        <label>
+          <input type="radio" name="mode" value="pomodoro" />
+          Pomodoro Mode
+        </label>
+      </div>
+
+      <div id="customInput">
+        <label>Work (sec): </label>
+        <input type="number" id="workDuration" value="10" min="1" />
+        <label>Rest (sec): </label>
+        <input type="number" id="breakDuration" value="5" min="1" />
+      </div>
+
+      <div class="controls">
+        <div class="btn-row">
+          <button class="start" id="startBtn">Start</button>
+          <button class="stop" id="stopBtn">Stop</button>
+        </div>
+        <div class="timer-note">
+          <em>(Note: background tabs or locked screens may pause timers)</em>
+        </div>
+      </div>
+
+      <div class="countdown" id="countdown">Ready</div>
+    </div>
+
+    <!-- === Main Timer Script === -->
+    <script>
+      (function () {
+        const startBtn = document.getElementById("startBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const countdown = document.getElementById("countdown");
+        const customInput = document.getElementById("customInput");
+
+        let mode = "custom";
+        let audioCtx = null;
+        let wakeLock = null;
+        let timerSchedule = null;
+        let phase = "work";
+        let nextAt = null;
+        let workSec = 10;
+        let restSec = 5;
+        let pomodoroState = "focus";
+        let pomodoroEnd = null;
+        let isRunning = false;
+
+        async function ensureAudio() {
+          try {
+            if (!audioCtx)
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === "running") return true;
+            await audioCtx.resume();
+            return true;
+          } catch (e) {
+            console.warn("Audio resume failed:", e);
+            return false;
+          }
+        }
+
+        function playBeep(freq = 880, dur = 0.18, vol = 0.28) {
+          try {
+            if (!audioCtx)
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + dur);
+          } catch (e) {
+            console.warn("Beep error:", e);
+          }
+        }
+
+        function maybeNotify(title, body) {
+          try {
+            if (
+              typeof Notification !== "undefined" &&
+              Notification.permission === "granted"
+            ) {
+              const n = new Notification(title, { body });
+              setTimeout(() => n.close && n.close(), 4000);
+            }
+          } catch (e) {
+            console.warn("Notification error:", e);
+          }
+        }
+
+        async function requestWakeLock() {
+          if (!("wakeLock" in navigator)) return false;
+          try {
+            wakeLock = await navigator.wakeLock.request("screen");
+            wakeLock.addEventListener("release", () => (wakeLock = null));
+            return true;
+          } catch (e) {
+            console.warn("WakeLock failed:", e);
+            wakeLock = null;
+            return false;
+          }
+        }
+
+        function scheduleNext() {
+          if (timerSchedule) clearTimeout(timerSchedule);
+          if (!nextAt) return;
+
+          const ms = nextAt - Date.now();
+          if (ms <= 0) return onDue();
+
+          timerSchedule = setTimeout(scheduleNext, Math.min(ms, 1000));
+        }
+
+        function onDue() {
+          const now = Date.now();
+
+          if (mode === "custom") {
+            phase = phase === "work" ? "rest" : "work";
+            nextAt = now + (phase === "work" ? workSec : restSec) * 1000;
+            playBeep(phase === "work" ? 880 : 560);
+            if (document.hidden) maybeNotify("Timer update", `Now: ${phase}`);
+            scheduleNext();
+          } else {
+            pomodoroState = pomodoroState === "focus" ? "break" : "focus";
+            const dur = (pomodoroState === "focus" ? 25 : 5) * 60 * 1000;
+            pomodoroEnd = now + dur;
+            nextAt = pomodoroEnd;
+            playBeep();
+            if (document.hidden) maybeNotify("Pomodoro", `Now: ${pomodoroState}`);
+            scheduleNext();
+          }
+        }
+
+        function updateLoopUI() {
+          if (!isRunning || !nextAt) {
+            countdown.textContent = "Ready";
+            return;
+          }
+          const rem = Math.max(0, Math.round((nextAt - Date.now()) / 1000));
+          countdown.textContent = `${phase === "work" ? "Work" : "Rest"}: ${rem}s`;
+          if (isRunning) setTimeout(updateLoopUI, 900);
+        }
+
+        function updatePomodoroUI() {
+          if (!isRunning || !nextAt || !pomodoroEnd) {
+            countdown.textContent = "Ready";
+            return;
+          }
+          const rem = Math.max(0, Math.round((pomodoroEnd - Date.now()) / 1000));
+          const min = String(Math.floor(rem / 60)).padStart(2, "0");
+          const sec = String(rem % 60).padStart(2, "0");
+          countdown.textContent = `${
+            pomodoroState === "focus" ? "Focus" : "Break"
+          }: ${min}:${sec}`;
+          if (isRunning) setTimeout(updatePomodoroUI, 900);
+        }
+
+        async function startTimer() {
+          await ensureAudio();
+          if (typeof Notification !== "undefined" && Notification.permission === "default")
+            await Notification.requestPermission();
+          await requestWakeLock();
+
+          startBtn,disabled = true;
+          isRunning = true;
+
+          if (mode === "pomodoro") {
+            pomodoroState = "focus";
+            pomodoroEnd = Date.now() + 25 * 60 * 1000;
+            nextAt = pomodoroEnd;
+            updatePomodoroUI();
+          } else {
+            workSec = parseInt(document.getElementById("workDuration").value, 10);
+            restSec = parseInt(document.getElementById("breakDuration").value, 10);
+            if (isNaN(workSec) || workSec <= 0 || isNaN(restSec) || restSec <= 0) {
+              alert("Please enter valid work and rest times in seconds.");
+              return;
+            }
+            phase = "work";
+            nextAt = Date.now() + workSec * 1000;
+            updateLoopUI();
+          }
+
+          scheduleNext();
+          
+        }
+
+        function stopTimer() {
+          if (timerSchedule) clearTimeout(timerSchedule);
+          nextAt = null;
+          startBtn.disabled = false;
+          countdown.textContent = "Stopped";
+          isRunning = false;
+          if (wakeLock) {
+            try {
+              wakeLock.release();
+              wakeLock = null;
+            } catch (e) {
+              console.warn("Wake release error:", e);
+            }
+          }
+        }
+
+        document
+          .querySelectorAll('input[name="mode"]')
+          .forEach((input) =>
+            input.addEventListener("change", (e) => {
+              stopTimer();
+              mode = e.target.value;
+              countdown.textContent =
+                mode === "pomodoro" ? "Focus: 25:00" : "Ready";
+              if (mode === "custom") {
+               customInput.classList.remove("hidden");
+              } else {
+               customInput.classList.add("hidden");
+              }
+            })
+          );
+
+        startBtn.addEventListener("click", startTimer);
+        stopBtn.addEventListener("click", stopTimer);
+      })();
+    </script>
+
+    <!-- === PWA Install Button === -->
+    <button
+      id="installBtn"
+      style="
+        display: none;
+        position: fixed;
+        bottom: 90px;
+        right: 16px;
+        padding: 0.5rem 0.85rem;
+        border-radius: 22px;
+        background: #28a745;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+      "
+    >
+      Install app
+    </button>
+
+    <script>
+      let deferredPrompt;
+      const installBtn = document.getElementById("installBtn");
+
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = "block";
+      });
+
+      installBtn.addEventListener("click", async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        installBtn.style.display = "none";
+      });
+
+      // Register service worker
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("service-worker.js")
+            .then(() => console.log("Service Worker Registered"))
+            .catch((err) => console.log("SW Failed:", err));
+        });
+      }
+    </script>
+
+    <!-- Buy Me a Coffee -->
+    <a
+      href="https://www.buymeacoffee.com/cherbear"
+      target="_blank"
+      class="support-button"
+      title="Support my work"
+      >☕ Buy Me a Coffee</a>
+
+    <!-- Unified Platform Note -->
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const ua = navigator.userAgent.toLowerCase();
+        const isIOS = /iphone|ipad|ipod/.test(ua);
+        const isSafari = /safari/.test(ua) && !/chrome|android/.test(ua);
+        const isMobile = /mobi|android/.test(ua);
+
+        if (isIOS && isSafari) {
+          showNote(
+            "⚠️ iOS Safari may pause timers when the screen locks. For best results, add this app to your Home Screen or set Auto-Lock to Never."
+          );
+        } else if (isMobile) {
+          showNote(
+            "⚠️ Some mobile browsers pause timers in background. Try adding to Home Screen or keeping the screen active."
+          );
+        } else if (isSafari) {
+          showNote(
+            "⚠️ Desktop Safari may throttle background tabs. Keep this tab active for accurate timing."
+          );
+        }
+
+        function showNote(message) {
+          const div = document.createElement("div");
+          div.textContent = message;
+          div.style.cssText = `
+            position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+            background:#28a745; color:#fff; padding:0.8rem 1rem;
+            border-radius:12px; font-size:0.9rem;
+            box-shadow:0 2px 8px rgba(0,0,0,0.2);
+            z-index:1000; text-align:center;
+          `;
+          document.body.appendChild(div);
+          setTimeout(() => div.remove(), 4000);
+        }
+      });
+    </script>
+  </body>
+</html>
